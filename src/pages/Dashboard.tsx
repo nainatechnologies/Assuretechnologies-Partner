@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { toast } from 'react-toastify';
 import {
   FiUser,
   FiInbox,
@@ -13,8 +14,9 @@ import {
   FiCamera,
   FiMapPin,
   FiPhone,
-  FiMap
+  FiRefreshCw
 } from 'react-icons/fi';
+import api from '../services/api';
 import './Dashboard.css';
 
 type JobStatus = 'assigned' | 'inProgress' | 'awaiting' | 'completed';
@@ -28,9 +30,12 @@ export type ProgressUpdate = {
 
 type Job = {
   id: string;
+  displayId: string;
+  orderNumber?: string;
   title: string;
   date: string;
   status: JobStatus;
+  cropType?: string;
   user: {
     name: string;
     mobile: string;
@@ -42,67 +47,123 @@ type Job = {
     lng: number;
   };
   progressUpdates?: ProgressUpdate[];
+  extraItems?: ExtraItem[];
 };
-
-const initialJobs: Job[] = [
-  { 
-    id: 'DB1784871293', 
-    title: 'Standard Spray Drone (10L)', 
-    date: '2026-07-24 | 2 PM - 4 PM', 
-    status: 'assigned',
-    user: { name: 'Rajesh Farmer', mobile: '+91 9988776655' },
-    location: { address: 'Kolakaluru, Tenali, Guntur Dist.', surveyNumber: '123/A', lat: 16.2366, lng: 80.6475 },
-    progressUpdates: []
-  },
-  { 
-    id: 'DB1784871294', 
-    title: 'Mahindra 575 DI Tractor', 
-    date: 'Started at: 2026-07-14 16:37:41', 
-    status: 'inProgress',
-    user: { name: 'Priya Sharma', mobile: '+91 9123456789' },
-    location: { address: 'Chebrole, Guntur Dist.', surveyNumber: '45/B', lat: 16.1950, lng: 80.5255 },
-    progressUpdates: [
-      {
-        id: 'PRG1',
-        date: '2026-07-15 10:00:00',
-        description: 'Arrived at the field and inspected the soil condition.',
-        photos: ['https://placehold.co/150x150/e2e8f0/64748b?text=Field+1']
-      }
-    ]
-  },
-  { 
-    id: 'DB1784871295', 
-    title: 'Granule Spreader Drone', 
-    date: 'Started at: 2026-07-24 11:53:01', 
-    status: 'inProgress',
-    user: { name: 'Srinivas Rao', mobile: '+91 9988112233' },
-    location: { address: 'Amaravati, Guntur Dist.', surveyNumber: '99/C', lat: 16.5062, lng: 80.3153 }
-  }
-];
 
 export default function Dashboard() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<JobStatus>('assigned');
-  const [jobs, setJobs] = useState<Job[]>(initialJobs);
+  const [jobs, setJobs] = useState<Job[]>([]);
+  const [loading, setLoading] = useState(true);
 
   // Modals state
   const [showStartModal, setShowStartModal] = useState(false);
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   const [startWorkPhotos, setStartWorkPhotos] = useState<string[]>([]);
+  const [startWorkFiles, setStartWorkFiles] = useState<File[]>([]);
   const [startWorkDescription, setStartWorkDescription] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [showCompleteModal, setShowCompleteModal] = useState(false);
   const [workDescription, setWorkDescription] = useState('');
   const [completeWorkPhotos, setCompleteWorkPhotos] = useState<string[]>([]);
+  const [completeWorkFiles, setCompleteWorkFiles] = useState<File[]>([]);
 
   // Daily Progress state
   const [showProgressModal, setShowProgressModal] = useState(false);
+  const [showExtraItemsModal, setShowExtraItemsModal] = useState(false);
+  const [extraItemDesc, setExtraItemDesc] = useState('');
+  const [extraItemQty, setExtraItemQty] = useState('');
   const [progressDescription, setProgressDescription] = useState('');
   const [progressPhotos, setProgressPhotos] = useState<string[]>([]);
+  const [progressFiles, setProgressFiles] = useState<File[]>([]);
 
   // Previous Progress state
   const [showPreviousProgressModal, setShowPreviousProgressModal] = useState(false);
   const [selectedProgressUpdates, setSelectedProgressUpdates] = useState<ProgressUpdate[]>([]);
+
+  const fetchJobs = async () => {
+    try {
+      setLoading(true);
+      const res = await api.get('/partner/service-bookings');
+      if (res.data && res.data.success) {
+        const rawJobs = res.data.data || [];
+        const mappedJobs: Job[] = rawJobs.map((raw: any) => {
+          let mappedStatus: JobStatus = 'assigned';
+          if (raw.status === 'IN_PROGRESS') mappedStatus = 'inProgress';
+          else if (raw.status === 'AWAITING_APPROVAL') mappedStatus = 'awaiting';
+          else if (raw.status === 'COMPLETED') mappedStatus = 'completed';
+
+          let surveyNumber = 'N/A';
+          let cropType = '';
+          if (raw.metadata && typeof raw.metadata === 'object') {
+            const cf = raw.metadata.custom_fields || raw.metadata;
+            if (cf.fld_1) surveyNumber = cf.fld_1;
+            if (cf.fld_2) cropType = cf.fld_2;
+          }
+
+          let formattedAddress = 'Address not provided';
+          if (raw.metadata?.custom_fields) {
+            const cf = raw.metadata.custom_fields;
+            const parts = [cf.fld_5, cf.fld_4, cf.fld_3].filter(Boolean);
+            if (parts.length > 0) formattedAddress = parts.join(', ');
+          } else if (raw.Order?.customer_address) {
+            try {
+              const parsed = typeof raw.Order.customer_address === 'string' ? JSON.parse(raw.Order.customer_address) : raw.Order.customer_address;
+              const parts = [parsed.line1, parsed.line2, parsed.city, parsed.state, parsed.pincode].filter(Boolean);
+              formattedAddress = parts.length > 0 ? parts.join(', ') : (typeof raw.Order.customer_address === 'string' ? raw.Order.customer_address : 'Address available');
+            } catch (e) {
+              formattedAddress = raw.Order.customer_address;
+            }
+          } else if (raw.address) {
+            try {
+              const parsed = typeof raw.address === 'string' ? JSON.parse(raw.address) : raw.address;
+              const parts = [parsed.line1, parsed.line2, parsed.city, parsed.state, parsed.country].filter(Boolean);
+              formattedAddress = parts.length > 0 ? parts.join(', ') : (typeof raw.address === 'string' ? raw.address : 'Address available');
+            } catch (e) {
+              formattedAddress = raw.address;
+            }
+          }
+
+          return {
+            id: raw.id,
+            displayId: raw.display_id || raw.id.substring(0, 8),
+            orderNumber: raw.Order?.order_number || '',
+            title: raw.Service?.name || 'Partner Service Booking',
+            date: raw.scheduled_date ? new Date(raw.scheduled_date).toLocaleDateString('en-GB') : 'N/A',
+            status: mappedStatus,
+            cropType,
+            user: {
+              name: raw.Order?.customer_name || 'Customer',
+              mobile: raw.Order?.customer_contact || 'N/A'
+            },
+            location: {
+              address: formattedAddress,
+              surveyNumber,
+              lat: Number(raw.lat) || 0,
+              lng: Number(raw.lng) || 0
+            },
+            progressUpdates: (raw.progress_updates || []).map((p: any) => ({
+              id: p.id,
+              date: p.createdAt ? new Date(p.createdAt).toLocaleString() : 'N/A',
+              description: p.description,
+              photos: p.photos || []
+            }))
+          };
+        });
+        setJobs(mappedJobs);
+      }
+    } catch (err: any) {
+      console.error('Failed to load partner bookings:', err);
+      toast.error(err.response?.data?.message || 'Failed to load bookings');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchJobs();
+  }, []);
 
   const handleStartWorkClick = (jobId: string) => {
     setSelectedJobId(jobId);
@@ -111,24 +172,29 @@ export default function Dashboard() {
     setShowStartModal(true);
   };
 
-  const confirmStartWork = () => {
-    if (selectedJobId && startWorkPhotos.length >= 1) {
-      setJobs(jobs.map(job => {
-        if (job.id === selectedJobId) {
-          const now = new Date();
-          return {
-            ...job,
-            status: 'inProgress',
-            date: `Started at: ${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`
-          };
-        }
-        return job;
-      }));
+  const confirmStartWork = async () => {
+    if (!selectedJobId) return;
+    try {
+      setIsSubmitting(true);
+      const formData = new FormData();
+      formData.append('action', 'START_WORK');
+      if (startWorkDescription) formData.append('description', startWorkDescription);
+      startWorkFiles.forEach(file => formData.append('photos', file));
+
+      await api.patch(`/partner/service-bookings/${selectedJobId}/action`, formData);
+      toast.success('Job started successfully!');
       setShowStartModal(false);
       setSelectedJobId(null);
       setStartWorkPhotos([]);
+      setStartWorkFiles([]);
       setStartWorkDescription('');
-      setActiveTab('inProgress'); // Automatically switch to "Work In Progress"
+      await fetchJobs();
+      setActiveTab('inProgress');
+    } catch (err: any) {
+      console.error('Start work failed:', err);
+      toast.error(err.response?.data?.message || 'Failed to start work');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -138,13 +204,22 @@ export default function Dashboard() {
       const remainingSlots = 3 - startWorkPhotos.length;
       const filesToProcess = filesArray.slice(0, remainingSlots);
 
-      const newPhotos = filesToProcess.map(file => URL.createObjectURL(file));
-      setStartWorkPhotos(prev => [...prev, ...newPhotos]);
+      setStartWorkFiles(prev => [...prev, ...filesToProcess]);
+      filesToProcess.forEach(file => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          if (reader.result) {
+            setStartWorkPhotos(prev => [...prev, reader.result as string]);
+          }
+        };
+        reader.readAsDataURL(file);
+      });
     }
   };
 
   const removePhoto = (index: number) => {
     setStartWorkPhotos(prev => prev.filter((_, i) => i !== index));
+    setStartWorkFiles(prev => prev.filter((_, i) => i !== index));
   };
 
   const handleCompleteWorkClick = (jobId: string) => {
@@ -154,19 +229,29 @@ export default function Dashboard() {
     setShowCompleteModal(true);
   };
 
-  const submitCompleteWork = () => {
-    if (selectedJobId && completeWorkPhotos.length >= 1) {
-      setJobs(jobs.map(job => {
-        if (job.id === selectedJobId) {
-          return { ...job, status: 'awaiting' };
-        }
-        return job;
-      }));
+  const submitCompleteWork = async () => {
+    if (!selectedJobId) return;
+    try {
+      setIsSubmitting(true);
+      const formData = new FormData();
+      formData.append('action', 'COMPLETE_WORK');
+      if (workDescription) formData.append('description', workDescription);
+      completeWorkFiles.forEach(file => formData.append('photos', file));
+
+      await api.patch(`/partner/service-bookings/${selectedJobId}/action`, formData);
+      toast.success('Work marked completed! Awaiting approval.');
       setShowCompleteModal(false);
       setSelectedJobId(null);
       setWorkDescription('');
       setCompleteWorkPhotos([]);
-      setActiveTab('awaiting'); // Switch to awaiting approval
+      setCompleteWorkFiles([]);
+      await fetchJobs();
+      setActiveTab('awaiting');
+    } catch (err: any) {
+      console.error('Complete work failed:', err);
+      toast.error(err.response?.data?.message || 'Failed to complete work');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -176,13 +261,22 @@ export default function Dashboard() {
       const remainingSlots = 3 - completeWorkPhotos.length;
       const filesToProcess = filesArray.slice(0, remainingSlots);
 
-      const newPhotos = filesToProcess.map(file => URL.createObjectURL(file));
-      setCompleteWorkPhotos(prev => [...prev, ...newPhotos]);
+      setCompleteWorkFiles(prev => [...prev, ...filesToProcess]);
+      filesToProcess.forEach(file => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          if (reader.result) {
+            setCompleteWorkPhotos(prev => [...prev, reader.result as string]);
+          }
+        };
+        reader.readAsDataURL(file);
+      });
     }
   };
 
   const removeCompletePhoto = (index: number) => {
     setCompleteWorkPhotos(prev => prev.filter((_, i) => i !== index));
+    setCompleteWorkFiles(prev => prev.filter((_, i) => i !== index));
   };
 
   const handleAddProgressClick = (jobId: string) => {
@@ -192,34 +286,29 @@ export default function Dashboard() {
     setShowProgressModal(true);
   };
 
-  const submitProgressUpdate = () => {
-    if (selectedJobId && progressDescription && progressPhotos.length >= 1) {
-      setJobs(jobs.map(job => {
-        if (job.id === selectedJobId) {
-          const now = new Date();
-          const newProgress: ProgressUpdate = {
-            id: `PRG_${Date.now()}`,
-            date: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`,
-            description: progressDescription,
-            photos: progressPhotos
-          };
-          return {
-            ...job,
-            progressUpdates: [...(job.progressUpdates || []), newProgress]
-          };
-        }
-        return job;
-      }));
+  const submitProgressUpdate = async () => {
+    if (!selectedJobId || !progressDescription) return;
+    try {
+      setIsSubmitting(true);
+      const formData = new FormData();
+      formData.append('action', 'ADD_PROGRESS');
+      formData.append('description', progressDescription);
+      progressFiles.forEach(file => formData.append('photos', file));
+
+      await api.patch(`/partner/service-bookings/${selectedJobId}/action`, formData);
+      toast.success('Progress update recorded!');
       setShowProgressModal(false);
       setSelectedJobId(null);
       setProgressDescription('');
       setProgressPhotos([]);
+      setProgressFiles([]);
+      await fetchJobs();
+    } catch (err: any) {
+      console.error('Add progress failed:', err);
+      toast.error(err.response?.data?.message || 'Failed to add progress');
+    } finally {
+      setIsSubmitting(false);
     }
-  };
-
-  const handleViewPreviousProgress = (updates: ProgressUpdate[]) => {
-    setSelectedProgressUpdates(updates);
-    setShowPreviousProgressModal(true);
   };
 
   const handleProgressPhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -228,24 +317,96 @@ export default function Dashboard() {
       const remainingSlots = 3 - progressPhotos.length;
       const filesToProcess = filesArray.slice(0, remainingSlots);
 
-      const newPhotos = filesToProcess.map(file => URL.createObjectURL(file));
-      setProgressPhotos(prev => [...prev, ...newPhotos]);
+      setProgressFiles(prev => [...prev, ...filesToProcess]);
+      filesToProcess.forEach(file => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          if (reader.result) {
+            setProgressPhotos(prev => [...prev, reader.result as string]);
+          }
+        };
+        reader.readAsDataURL(file);
+      });
     }
   };
 
   const removeProgressPhoto = (index: number) => {
     setProgressPhotos(prev => prev.filter((_, i) => i !== index));
+    setProgressFiles(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleViewPreviousProgress = (updates: ProgressUpdate[]) => {
+    setSelectedProgressUpdates(updates);
+    setShowPreviousProgressModal(true);
+  };
+
+
+  const handleAddExtraItemsClick = (id: string) => {
+    setSelectedJobId(id);
+    setExtraItemDesc('');
+    setExtraItemQty('');
+    setShowExtraItemsModal(true);
+  };
+
+  const submitExtraItems = async () => {
+    if (!selectedJobId || !extraItemDesc.trim() || !extraItemQty.trim()) return;
+    try {
+      setIsSubmitting(true);
+      await api.patch(`/partner/service-bookings/${selectedJobId}/action`, {
+        action: 'REQUEST_EXTRA_ITEMS',
+        description: extraItemDesc.trim(),
+        extraItems: [
+          {
+            description: extraItemDesc.trim(),
+            qty: Number(extraItemQty)
+          }
+        ]
+      });
+      toast.success('Extra items requested successfully!');
+      setShowExtraItemsModal(false);
+      setSelectedJobId(null);
+      setExtraItemDesc('');
+      setExtraItemQty('');
+      await fetchJobs();
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Failed to request extra items');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await api.post('/auth/logout');
+    } catch (e) {
+      console.error('Logout error:', e);
+    }
+    localStorage.removeItem('user');
+    navigate('/login');
+  };
+
+  const getJobCount = (status: JobStatus) => {
+    return jobs.filter(job => job.status === status).length;
   };
 
   const renderJobs = () => {
+    if (loading) {
+      return (
+        <div className="empty-state" style={{ padding: '40px 0', textAlign: 'center' }}>
+          <FiRefreshCw className="animate-spin" size={28} style={{ color: '#2563eb', margin: '0 auto 12px' }} />
+          <p>Loading assigned jobs...</p>
+        </div>
+      );
+    }
+
     const filteredJobs = jobs.filter(job => job.status === activeTab);
 
     if (filteredJobs.length === 0) {
       const messages = {
-        assigned: 'No assigned jobs',
-        inProgress: 'No jobs in progress',
-        awaiting: 'No pending approvals',
-        completed: 'No completed jobs'
+        assigned: 'No new assigned jobs found',
+        inProgress: 'No jobs currently in progress',
+        awaiting: 'No jobs awaiting completion approval',
+        completed: 'No completed jobs yet'
       };
       return <div className="empty-state">{messages[activeTab]}</div>;
     }
@@ -253,11 +414,22 @@ export default function Dashboard() {
     return filteredJobs.map((job) => (
       <div key={job.id} className="job-card">
         <div className="job-card-header">
-          <h3 className="job-title">{job.title}</h3>
-          {job.status === 'assigned' && <span className="job-id">{job.id}</span>}
+          <div>
+            <h3 className="job-title">{job.title}</h3>
+            {job.cropType && (
+              <span style={{ fontSize: '0.75rem', background: '#ecfdf5', color: '#047857', padding: '2px 8px', borderRadius: '4px', fontWeight: 600 }}>
+                Crop: {job.cropType}
+              </span>
+            )}
+          </div>
+          <div style={{ textAlign: 'right' }}>
+            <span className="job-id" style={{ display: 'block', fontWeight: 700, color: '#1e3a8a' }}>{job.displayId}</span>
+            {job.orderNumber && <span style={{ fontSize: '0.75rem', color: '#64748b' }}>{job.orderNumber}</span>}
+          </div>
         </div>
+
         <div className="job-details">
-          <p className="job-date">{job.date}</p>
+          <p className="job-date">Scheduled: {job.date}</p>
           
           <div className="job-customer-section">
             <div className="job-customer-item">
@@ -275,36 +447,82 @@ export default function Dashboard() {
             <div className="location-content" style={{width: '100%'}}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
                 <span style={{ fontSize: '0.85rem', color: '#166534', fontWeight: 600 }}>Survey No: {job.location.surveyNumber}</span>
-                <a 
-                  href={`https://www.google.com/maps?q=${job.location.lat},${job.location.lng}`} 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="directions-link"
-                  style={{ marginTop: 0 }}
-                >
-                  Get Directions
-                </a>
+                {job.location.lat && job.location.lng ? (
+                  <a 
+                    href={`https://www.google.com/maps?q=${job.location.lat},${job.location.lng}`} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="directions-link"
+                    style={{ marginTop: 0 }}
+                  >
+                    Get Directions
+                  </a>
+                ) : null}
               </div>
               <p className="address-text">{job.location.address}</p>
             </div>
           </div>
         </div>
+
+
+        {job.extraItems && job.extraItems.length > 0 && (
+          <div style={{ marginTop: '12px', marginBottom: '12px', padding: '10px 14px', borderRadius: '8px', backgroundColor: '#f8fafc', border: '1px solid #e2e8f0' }}>
+            <div style={{ fontSize: '0.85rem', fontWeight: 600, color: '#475569', marginBottom: '6px' }}>
+              Requested Extra Items:
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              {job.extraItems.map((item) => (
+                <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.85rem' }}>
+                  <span style={{ color: '#1e293b', fontWeight: 500 }}>{item.description} (Qty: {item.qty})</span>
+                  {item.status === 'APPROVED' && (
+                    <span style={{ backgroundColor: '#dcfce7', color: '#15803d', padding: '2px 8px', borderRadius: '12px', fontWeight: 600, fontSize: '0.75rem' }}>
+                      ? Approved by Customer
+                    </span>
+                  )}
+                  {item.status === 'REJECTED' && (
+                    <span style={{ backgroundColor: '#fee2e2', color: '#b91c1c', padding: '2px 8px', borderRadius: '12px', fontWeight: 600, fontSize: '0.75rem' }}>
+                      ? Declined by Customer
+                    </span>
+                  )}
+                  {item.status === 'PENDING' && (
+                    <span style={{ backgroundColor: '#fef3c7', color: '#b45309', padding: '2px 8px', borderRadius: '12px', fontWeight: 600, fontSize: '0.75rem' }}>
+                      ? Pending Decision
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
         <div className="job-actions">
-          {(job.status === 'assigned' || job.status === 'inProgress') && job.progressUpdates && job.progressUpdates.length > 0 && (
+          {job.progressUpdates && job.progressUpdates.length > 0 && (
             <button 
               className="btn-action btn-previous-progress" 
               onClick={() => handleViewPreviousProgress(job.progressUpdates!)}
             >
-              Previous Progress
+              Previous Progress ({job.progressUpdates.length})
             </button>
           )}
           {job.status === 'assigned' && (
-            <button className="btn-action btn-start-work" onClick={() => handleStartWorkClick(job.id)}>Start Work</button>
+            <button className="btn-action btn-start-work" onClick={() => handleStartWorkClick(job.id)}>
+              Start Work
+            </button>
           )}
           {job.status === 'inProgress' && (
             <>
-              <button className="btn-action btn-add-progress" onClick={() => handleAddProgressClick(job.id)}>Add Daily Progress</button>
-              <button className="btn-action btn-complete-work" onClick={() => handleCompleteWorkClick(job.id)}>Complete Work</button>
+              <button 
+                className="btn-action btn-add-progress" 
+                style={{ backgroundColor: '#f59e0b', color: 'white', borderColor: '#f59e0b' }} 
+                onClick={() => handleAddExtraItemsClick(job.id)}
+              >
+                Add Extra Items
+              </button>
+              <button className="btn-action btn-add-progress" onClick={() => handleAddProgressClick(job.id)}>
+                Add Progress
+              </button>
+              <button className="btn-action btn-complete-work" onClick={() => handleCompleteWorkClick(job.id)}>
+                Complete Work
+              </button>
             </>
           )}
         </div>
@@ -312,11 +530,8 @@ export default function Dashboard() {
     ));
   };
 
-  const getJobCount = (status: JobStatus) => jobs.filter(job => job.status === status).length;
-
   return (
     <div className="dashboard-container">
-      {/* Top Header */}
       <header className="dashboard-header">
         <h1>Partner Dashboard</h1>
         <button className="profile-btn" onClick={() => navigate('/profile')}>
@@ -324,7 +539,7 @@ export default function Dashboard() {
         </button>
       </header>
 
-      {/* Modals */}
+      {/* Start Work Modal */}
       {showStartModal && (
         <div className="modal-overlay">
           <div className="modal-content complete-modal">
@@ -342,17 +557,14 @@ export default function Dashboard() {
                 value={startWorkDescription}
                 onChange={(e) => setStartWorkDescription(e.target.value)}
                 rows={4}
-              />
+              ></textarea>
 
-              <div className="photo-upload-section" style={{ marginTop: '20px' }}>
-                <p className="upload-instruction" style={{ textAlign: 'center', marginBottom: '15px' }}>
-                  Please upload 1-3 photos to start work.
-                </p>
-
-                <div className="photo-previews" style={{ justifyContent: 'center' }}>
+              <div className="photo-upload-section">
+                <p className="upload-instruction">Upload initial photos (optional, up to 3):</p>
+                <div className="photo-previews">
                   {startWorkPhotos.map((photo, index) => (
                     <div key={index} className="photo-thumbnail">
-                      <img src={photo} alt={`Upload preview ${index + 1}`} />
+                      <img src={photo} alt={`Start work preview ${index + 1}`} />
                       <button className="remove-photo-btn" onClick={() => removePhoto(index)}>
                         <FiX size={14} />
                       </button>
@@ -382,16 +594,16 @@ export default function Dashboard() {
               <button
                 className="btn-modal btn-submit"
                 onClick={confirmStartWork}
-                disabled={startWorkPhotos.length === 0}
+                disabled={isSubmitting}
               >
-                Submit
+                {isSubmitting ? 'Starting...' : 'Confirm & Start'}
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Add Progress Modal */}
+      {/* Daily Progress Modal */}
       {showProgressModal && (
         <div className="modal-overlay">
           <div className="modal-content complete-modal">
@@ -403,23 +615,20 @@ export default function Dashboard() {
             </div>
 
             <div className="complete-modal-body">
-              <div className="form-group" style={{ marginBottom: '16px' }}>
-                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 500 }}>Progress Description</label>
-                <textarea 
-                  placeholder="Describe what work was completed today..."
-                  rows={4}
-                  value={progressDescription}
-                  onChange={(e) => setProgressDescription(e.target.value)}
-                  style={{ width: '100%', padding: '12px', border: '1px solid #cbd5e1', borderRadius: '6px' }}
-                />
-              </div>
+              <textarea
+                placeholder="Describe progress made today..."
+                value={progressDescription}
+                onChange={(e) => setProgressDescription(e.target.value)}
+                className="work-description-input"
+                rows={4}
+              ></textarea>
 
-              <div className="form-group">
-                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 500 }}>Upload Progress Photos (Max 3)</label>
+              <div className="photo-upload-section">
+                <p className="upload-instruction">Upload progress photos (optional):</p>
                 <div className="photo-previews">
                   {progressPhotos.map((photo, index) => (
                     <div key={index} className="photo-thumbnail">
-                      <img src={photo} alt={`Upload preview ${index + 1}`} />
+                      <img src={photo} alt={`Progress preview ${index + 1}`} />
                       <button className="remove-photo-btn" onClick={() => removeProgressPhoto(index)}>
                         <FiX size={14} />
                       </button>
@@ -449,9 +658,91 @@ export default function Dashboard() {
               <button 
                 className="btn-modal btn-submit"
                 onClick={submitProgressUpdate}
-                disabled={!progressDescription || progressPhotos.length === 0}
+                disabled={!progressDescription || isSubmitting}
               >
-                Submit Progress
+                {isSubmitting ? 'Submitting...' : 'Submit Progress'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+
+      {/* Add Extra Items Modal */}
+      {showExtraItemsModal && (
+        <div className="modal-overlay">
+          <div className="modal-content complete-modal" style={{ maxWidth: '420px', width: '90%' }}>
+            <div className="complete-modal-header" style={{ backgroundColor: '#f59e0b' }}>
+              <h2 style={{ color: 'white', margin: 0, fontSize: '1.2rem', fontWeight: 600 }}>Add Extra Items</h2>
+              <button className="close-btn" onClick={() => setShowExtraItemsModal(false)}>
+                <FiX size={20} />
+              </button>
+            </div>
+
+            <div className="complete-modal-body" style={{ padding: '20px' }}>
+              <div style={{ marginBottom: '16px' }}>
+                <label style={{ display: 'block', marginBottom: '6px', fontWeight: 600, color: '#374151', fontSize: '0.9rem' }}>
+                  Item Description
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Extra 2L fertilizer or Spare blades"
+                  value={extraItemDesc}
+                  onChange={(e) => setExtraItemDesc(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px',
+                    borderRadius: '6px',
+                    border: '1px solid #cbd5e1',
+                    fontSize: '0.95rem',
+                    boxSizing: 'border-box'
+                  }}
+                  autoFocus
+                />
+              </div>
+
+              <div style={{ marginBottom: '16px' }}>
+                <label style={{ display: 'block', marginBottom: '6px', fontWeight: 600, color: '#374151', fontSize: '0.9rem' }}>
+                  Quantity
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  placeholder="e.g. 1"
+                  value={extraItemQty}
+                  onChange={(e) => setExtraItemQty(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px',
+                    borderRadius: '6px',
+                    border: '1px solid #cbd5e1',
+                    fontSize: '0.95rem',
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+            </div>
+
+            <div className="complete-modal-footer" style={{ padding: '16px 20px', borderTop: '1px solid #f1f5f9', display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+              <button 
+                type="button"
+                className="btn-modal btn-cancel" 
+                onClick={() => setShowExtraItemsModal(false)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn-modal"
+                onClick={submitExtraItems}
+                disabled={isSubmitting || !extraItemDesc.trim() || !extraItemQty.trim()}
+                style={{ 
+                  backgroundColor: '#f59e0b', 
+                  color: 'white',
+                  cursor: (isSubmitting || !extraItemDesc.trim() || !extraItemQty.trim()) ? 'not-allowed' : 'pointer'
+                }}
+              >
+                {isSubmitting ? 'Submitting...' : 'Submit Request'}
               </button>
             </div>
           </div>
@@ -471,7 +762,7 @@ export default function Dashboard() {
 
             <div className="complete-modal-body">
               <textarea
-                placeholder="Work description"
+                placeholder="Work completion summary notes..."
                 value={workDescription}
                 onChange={(e) => setWorkDescription(e.target.value)}
                 className="work-description-input"
@@ -479,8 +770,7 @@ export default function Dashboard() {
               ></textarea>
 
               <div className="photo-upload-section">
-                <p className="upload-instruction">Please upload 1-3 completion photos.</p>
-
+                <p className="upload-instruction">Upload completion photos:</p>
                 <div className="photo-previews">
                   {completeWorkPhotos.map((photo, index) => (
                     <div key={index} className="photo-thumbnail">
@@ -514,9 +804,9 @@ export default function Dashboard() {
               <button
                 className="btn-modal btn-submit"
                 onClick={submitCompleteWork}
-                disabled={completeWorkPhotos.length === 0}
+                disabled={isSubmitting}
               >
-                Submit
+                {isSubmitting ? 'Submitting...' : 'Submit Completion'}
               </button>
             </div>
           </div>
@@ -525,10 +815,10 @@ export default function Dashboard() {
 
       {/* Previous Progress Modal */}
       {showPreviousProgressModal && (
-        <div className="modal-overlay" onClick={() => setShowPreviousProgressModal(false)}>
-          <div className="modal-content complete-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-overlay">
+          <div className="modal-content complete-modal">
             <div className="complete-modal-header">
-              <h2>Previous Progress</h2>
+              <h2>Previous Progress Timeline</h2>
               <button className="close-btn" onClick={() => setShowPreviousProgressModal(false)}>
                 <FiX size={24} />
               </button>
@@ -551,7 +841,7 @@ export default function Dashboard() {
                   ))}
                 </div>
               ) : (
-                <p>No previous progress found.</p>
+                <p style={{ textAlign: 'center', color: '#64748b' }}>No previous progress updates logged yet.</p>
               )}
             </div>
             <div className="complete-modal-footer">
@@ -647,7 +937,7 @@ export default function Dashboard() {
           <FiBriefcase size={24} />
           <span>Jobs</span>
         </button>
-        <button className="nav-item" onClick={() => navigate('/login')}>
+        <button className="nav-item" onClick={handleLogout}>
           <FiLogOut size={24} />
           <span>Logout</span>
         </button>
