@@ -27,3 +27,15 @@ export const getCurrentUser = (): AuthUser | null => {
     return null;
   }
 };
+
+import api from './api';
+
+export const requestPasswordResetOtp = async (mobile: string) => {
+  const response = await api.post('/auth/partner/forgot-password', { mobile });
+  return response.data;
+};
+
+export const resetPassword = async (data: any) => {
+  const response = await api.post('/auth/partner/reset-password', data);
+  return response.data;
+};

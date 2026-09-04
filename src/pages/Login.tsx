@@ -21,7 +21,9 @@ const Login = () => {
     setLoading(true);
 
     try {
-      const response = await api.post('/auth/partner/login', { email, password });
+      const isMobile = /^\d+$/.test(email);
+        const payload = isMobile ? { mobile: email, password } : { email: email, password };
+        const response = await api.post('/auth/partner/login', payload);
 
       if (response.data.success) {
         if (response.data.requiresPasswordChange) {
@@ -65,12 +67,9 @@ const Login = () => {
     setLoading(true);
 
     try {
-      const response = await api.post('/auth/partner/set-password', {
-        email: email,
-        old_password: password,
-        new_password: newPassword,
-        confirm_password: confirmPassword
-      });
+      const isMobile = /^\d+$/.test(email);
+        const payload = isMobile ? { mobile: email, old_password: password, new_password: newPassword, confirm_password: confirmPassword } : { email: email, old_password: password, new_password: newPassword, confirm_password: confirmPassword };
+        const response = await api.post('/auth/partner/set-password', payload);
 
       if (response.data.success) {
         if (response.data.data?.user) {
@@ -107,11 +106,11 @@ const Login = () => {
         {step === 'LOGIN' ? (
           <form onSubmit={handleLogin}>
             <div className="form-group" style={{ marginBottom: '20px' }}>
-              <label style={{ display: 'block', marginBottom: '8px', fontWeight: 500, color: '#374151' }}>Email Address</label>
+              <label style={{ display: 'block', marginBottom: '8px', fontWeight: 500, color: '#374151' }}>Email or Mobile Number</label>
               <div style={{ position: 'relative' }}>
                 <MdEmail style={{ position: 'absolute', top: '50%', left: '16px', transform: 'translateY(-50%)', color: '#9ca3af', fontSize: '1.2rem' }} />
                 <input 
-                  type="email" 
+                  type="text" 
                   className="form-control" 
                   placeholder="dronePartner@assure.com" 
                   style={{ width: '100%', padding: '12px 12px 12px 48px', borderRadius: '8px', border: '1px solid #d1d5db', boxSizing: 'border-box' }} 
@@ -125,7 +124,7 @@ const Login = () => {
             <div className="form-group" style={{ marginBottom: '24px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
                 <label style={{ fontWeight: 500, color: '#374151' }}>Password</label>
-                <a href="#" style={{ color: '#4F46E5', fontSize: '13px', fontWeight: 600, textDecoration: 'none' }}>Forgot Password?</a>
+                <a href="#" onClick={(e) => { e.preventDefault(); navigate('/forgot-password'); }} style={{ color: '#4F46E5', fontSize: '13px', fontWeight: 600, textDecoration: 'none' }}>Forgot Password?</a>
               </div>
               <div style={{ position: 'relative' }}>
                 <MdLock style={{ position: 'absolute', top: '50%', left: '16px', transform: 'translateY(-50%)', color: '#9ca3af', fontSize: '1.2rem' }} />
@@ -148,9 +147,9 @@ const Login = () => {
         ) : (
           <form onSubmit={handleSetNewPassword}>
             <div className="form-group" style={{ marginBottom: '20px' }}>
-              <label style={{ display: 'block', marginBottom: '8px', fontWeight: 500, color: '#374151' }}>Email Address</label>
+              <label style={{ display: 'block', marginBottom: '8px', fontWeight: 500, color: '#374151' }}>Email or Mobile Number</label>
               <input 
-                type="email" 
+                type="text" 
                 className="form-control" 
                 value={email}
                 disabled
@@ -215,3 +214,8 @@ const Login = () => {
 };
 
 export default Login;
+
+
+
+
+

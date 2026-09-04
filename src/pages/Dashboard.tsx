@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-toastify';
 import {
   FiUser,
@@ -20,6 +21,13 @@ import api from '../services/api';
 import './Dashboard.css';
 
 type JobStatus = 'assigned' | 'inProgress' | 'awaiting' | 'completed';
+
+export type ExtraItem = {
+  id?: string;
+  description: string;
+  qty: number;
+  status?: 'APPROVED' | 'REJECTED' | 'PENDING';
+};
 
 export type ProgressUpdate = {
   id: string;
@@ -52,9 +60,10 @@ type Job = {
 
 export default function Dashboard() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<JobStatus>('assigned');
-  const [jobs, setJobs] = useState<Job[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const limit = 10;
 
   // Modals state
   const [showStartModal, setShowStartModal] = useState(false);
@@ -82,13 +91,14 @@ export default function Dashboard() {
   const [showPreviousProgressModal, setShowPreviousProgressModal] = useState(false);
   const [selectedProgressUpdates, setSelectedProgressUpdates] = useState<ProgressUpdate[]>([]);
 
-  const fetchJobs = async () => {
-    try {
-      setLoading(true);
-      const res = await api.get('/partner/service-bookings');
+  const { data = { jobs: [], totalPages: 1 }, isLoading: loading } = useQuery({
+    queryKey: ['service-bookings', page],
+    queryFn: async () => {
+      const res = await api.get(`/partner/service-bookings?page=${page}&limit=${limit}`);
       if (res.data && res.data.success) {
         const rawJobs = res.data.data || [];
-        const mappedJobs: Job[] = rawJobs.map((raw: any) => {
+        const meta = res.data.meta || { totalPages: 1 };
+        const jobs = rawJobs.map((raw: any) => {
           let mappedStatus: JobStatus = 'assigned';
           if (raw.status === 'IN_PROGRESS') mappedStatus = 'inProgress';
           else if (raw.status === 'AWAITING_APPROVAL') mappedStatus = 'awaiting';
@@ -151,19 +161,14 @@ export default function Dashboard() {
             }))
           };
         });
-        setJobs(mappedJobs);
+        return { jobs, totalPages: meta.totalPages };
       }
-    } catch (err: any) {
-      console.error('Failed to load partner bookings:', err);
-      toast.error(err.response?.data?.message || 'Failed to load bookings');
-    } finally {
-      setLoading(false);
+      return { jobs: [], totalPages: 1 };
     }
-  };
+  });
 
-  useEffect(() => {
-    fetchJobs();
-  }, []);
+  const jobs = data.jobs as Job[];
+  const totalPages = data.totalPages;
 
   const handleStartWorkClick = (jobId: string) => {
     setSelectedJobId(jobId);
@@ -188,7 +193,7 @@ export default function Dashboard() {
       setStartWorkPhotos([]);
       setStartWorkFiles([]);
       setStartWorkDescription('');
-      await fetchJobs();
+      await queryClient.invalidateQueries({ queryKey: ['service-bookings'] });
       setActiveTab('inProgress');
     } catch (err: any) {
       console.error('Start work failed:', err);
@@ -245,7 +250,7 @@ export default function Dashboard() {
       setWorkDescription('');
       setCompleteWorkPhotos([]);
       setCompleteWorkFiles([]);
-      await fetchJobs();
+      await queryClient.invalidateQueries({ queryKey: ['service-bookings'] });
       setActiveTab('awaiting');
     } catch (err: any) {
       console.error('Complete work failed:', err);
@@ -302,7 +307,7 @@ export default function Dashboard() {
       setProgressDescription('');
       setProgressPhotos([]);
       setProgressFiles([]);
-      await fetchJobs();
+      await queryClient.invalidateQueries({ queryKey: ['service-bookings'] });
     } catch (err: any) {
       console.error('Add progress failed:', err);
       toast.error(err.response?.data?.message || 'Failed to add progress');
@@ -367,7 +372,7 @@ export default function Dashboard() {
       setSelectedJobId(null);
       setExtraItemDesc('');
       setExtraItemQty('');
-      await fetchJobs();
+      await queryClient.invalidateQueries({ queryKey: ['service-bookings'] });
     } catch (err: any) {
       toast.error(err.response?.data?.message || 'Failed to request extra items');
     } finally {
@@ -912,6 +917,29 @@ export default function Dashboard() {
         <div className="job-list">
           {renderJobs()}
         </div>
+
+        {/* Pagination Controls */}
+        {!loading && totalPages > 1 && (
+          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '15px', padding: '20px 0', paddingBottom: '80px' }}>
+            <button
+              onClick={() => setPage(p => Math.max(1, p - 1))}
+              disabled={page === 1}
+              style={{ padding: '8px 16px', borderRadius: '8px', border: '1px solid #cbd5e1', backgroundColor: page === 1 ? '#f1f5f9' : '#ffffff', color: page === 1 ? '#94a3b8' : '#0f172a', fontWeight: 600, cursor: page === 1 ? 'not-allowed' : 'pointer' }}
+            >
+              Previous
+            </button>
+            <span style={{ fontSize: '0.9rem', color: '#64748b', fontWeight: 500 }}>
+              Page {page} of {totalPages}
+            </span>
+            <button
+              onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+              disabled={page === totalPages}
+              style={{ padding: '8px 16px', borderRadius: '8px', border: '1px solid #cbd5e1', backgroundColor: page === totalPages ? '#f1f5f9' : '#ffffff', color: page === totalPages ? '#94a3b8' : '#0f172a', fontWeight: 600, cursor: page === totalPages ? 'not-allowed' : 'pointer' }}
+            >
+              Next
+            </button>
+          </div>
+        )}
       </main>
 
       {/* Bottom Navigation */}
