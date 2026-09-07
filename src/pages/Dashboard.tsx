@@ -86,6 +86,8 @@ export default function Dashboard() {
   const [progressDescription, setProgressDescription] = useState('');
   const [progressPhotos, setProgressPhotos] = useState<string[]>([]);
   const [progressFiles, setProgressFiles] = useState<File[]>([]);
+  const [isOnline, setIsOnline] = useState(false);
+  const [togglingDuty, setTogglingDuty] = useState(false);
 
   // Previous Progress state
   const [showPreviousProgressModal, setShowPreviousProgressModal] = useState(false);
@@ -96,6 +98,9 @@ export default function Dashboard() {
     queryFn: async () => {
       const res = await api.get(`/partner/service-bookings?page=${page}&limit=${limit}`);
       if (res.data && res.data.success) {
+        if (res.data.is_online !== undefined) {
+          setIsOnline(Boolean(res.data.is_online));
+        }
         const rawJobs = res.data.data || [];
         const meta = res.data.meta || { totalPages: 1 };
         const jobs = rawJobs.map((raw: any) => {
@@ -177,6 +182,21 @@ export default function Dashboard() {
     setShowStartModal(true);
   };
 
+  const handleToggleDuty = async () => {
+    try {
+      setTogglingDuty(true);
+      const nextStatus = !isOnline;
+      const res = await api.patch('/duty-status', { is_online: nextStatus });
+      if (res.data && res.data.success) {
+        setIsOnline(Boolean(res.data.data.is_online));
+      }
+    } catch (e) {
+      console.error('Duty toggle error:', e);
+    } finally {
+      setTogglingDuty(false);
+    }
+  };
+
   const confirmStartWork = async () => {
     if (!selectedJobId) return;
     try {
@@ -187,6 +207,7 @@ export default function Dashboard() {
       startWorkFiles.forEach(file => formData.append('photos', file));
 
       await api.patch(`/partner/service-bookings/${selectedJobId}/action`, formData);
+      setIsOnline(true);
       toast.success('Job started successfully!');
       setShowStartModal(false);
       setSelectedJobId(null);
@@ -539,9 +560,40 @@ export default function Dashboard() {
     <div className="dashboard-container">
       <header className="dashboard-header">
         <h1>Partner Dashboard</h1>
-        <button className="profile-btn" onClick={() => navigate('/profile')}>
-          <FiUser size={24} />
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <button
+            onClick={handleToggleDuty}
+            disabled={togglingDuty}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '6px 14px',
+              borderRadius: '20px',
+              border: isOnline ? '1px solid #10b981' : '1px solid rgba(255,255,255,0.4)',
+              backgroundColor: isOnline ? '#10b981' : 'rgba(255,255,255,0.15)',
+              color: '#ffffff',
+              fontWeight: 600,
+              fontSize: '0.85rem',
+              cursor: togglingDuty ? 'not-allowed' : 'pointer',
+              transition: 'all 0.2s ease'
+            }}
+            title={isOnline ? 'You are ON duty (Receiving new job assignments)' : 'You are OFF duty (Hidden from new job assignments)'}
+          >
+            <span
+              style={{
+                width: '8px',
+                height: '8px',
+                borderRadius: '50%',
+                backgroundColor: isOnline ? '#ffffff' : 'rgba(255,255,255,0.6)'
+              }}
+            />
+            {togglingDuty ? 'Updating...' : isOnline ? 'Duty ON' : 'Duty OFF'}
+          </button>
+          <button className="profile-btn" onClick={() => navigate('/profile')}>
+            <FiUser size={24} />
+          </button>
+        </div>
       </header>
 
       {/* Start Work Modal */}
