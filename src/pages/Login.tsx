@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { MdEmail, MdLock } from 'react-icons/md';
+import { MdEmail, MdLock, MdVisibility, MdVisibilityOff } from 'react-icons/md';
 import { toast } from 'react-toastify';
 import api from '../services/api';
 
@@ -10,8 +10,11 @@ const Login = () => {
   const [step, setStep] = useState<'LOGIN' | 'SET_PASSWORD'>('LOGIN');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [newPassword, setNewPassword] = useState('');
+  const [showNewPassword, setShowNewPassword] = useState(false);
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -22,8 +25,8 @@ const Login = () => {
 
     try {
       const isMobile = /^\d+$/.test(email);
-        const payload = isMobile ? { mobile: email, password } : { email: email, password };
-        const response = await api.post('/auth/partner/login', payload);
+      const payload = isMobile ? { mobile: email, password } : { email: email, password };
+      const response = await api.post('/auth/partner/login', payload);
 
       if (response.data.success) {
         if (response.data.requiresPasswordChange) {
@@ -68,8 +71,8 @@ const Login = () => {
 
     try {
       const isMobile = /^\d+$/.test(email);
-        const payload = isMobile ? { mobile: email, old_password: password, new_password: newPassword, confirm_password: confirmPassword } : { email: email, old_password: password, new_password: newPassword, confirm_password: confirmPassword };
-        const response = await api.post('/auth/partner/set-password', payload);
+      const payload = isMobile ? { mobile: email, old_password: password, new_password: newPassword, confirm_password: confirmPassword } : { email: email, old_password: password, new_password: newPassword, confirm_password: confirmPassword };
+      const response = await api.post('/auth/partner/set-password', payload);
 
       if (response.data.success) {
         if (response.data.data?.user) {
@@ -129,14 +132,36 @@ const Login = () => {
               <div style={{ position: 'relative' }}>
                 <MdLock style={{ position: 'absolute', top: '50%', left: '16px', transform: 'translateY(-50%)', color: '#9ca3af', fontSize: '1.2rem' }} />
                 <input 
-                  type="password" 
+                  type={showPassword ? 'text' : 'password'} 
                   className="form-control" 
                   placeholder="••••••••" 
-                  style={{ width: '100%', padding: '12px 12px 12px 48px', borderRadius: '8px', border: '1px solid #d1d5db', boxSizing: 'border-box' }} 
+                  style={{ width: '100%', padding: '12px 44px 12px 48px', borderRadius: '8px', border: '1px solid #d1d5db', boxSizing: 'border-box' }} 
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required 
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  style={{
+                    position: 'absolute',
+                    top: '50%',
+                    right: '14px',
+                    transform: 'translateY(-50%)',
+                    background: 'none',
+                    border: 'none',
+                    padding: 0,
+                    cursor: 'pointer',
+                    color: '#9ca3af',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '1.25rem',
+                  }}
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                >
+                  {showPassword ? <MdVisibilityOff /> : <MdVisibility />}
+                </button>
               </div>
             </div>
 
@@ -162,15 +187,37 @@ const Login = () => {
               <div style={{ position: 'relative' }}>
                 <MdLock style={{ position: 'absolute', top: '50%', left: '16px', transform: 'translateY(-50%)', color: '#9ca3af', fontSize: '1.2rem' }} />
                 <input 
-                  type="password" 
+                  type={showNewPassword ? 'text' : 'password'} 
                   className="form-control" 
                   placeholder="Min. 8 chars" 
-                  style={{ width: '100%', padding: '12px 12px 12px 48px', borderRadius: '8px', border: '1px solid #d1d5db', boxSizing: 'border-box' }} 
+                  style={{ width: '100%', padding: '12px 44px 12px 48px', borderRadius: '8px', border: '1px solid #d1d5db', boxSizing: 'border-box' }} 
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
                   required 
                   autoFocus
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowNewPassword(!showNewPassword)}
+                  style={{
+                    position: 'absolute',
+                    top: '50%',
+                    right: '14px',
+                    transform: 'translateY(-50%)',
+                    background: 'none',
+                    border: 'none',
+                    padding: 0,
+                    cursor: 'pointer',
+                    color: '#9ca3af',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '1.25rem',
+                  }}
+                  aria-label={showNewPassword ? 'Hide password' : 'Show password'}
+                >
+                  {showNewPassword ? <MdVisibilityOff /> : <MdVisibility />}
+                </button>
               </div>
             </div>
 
@@ -179,14 +226,36 @@ const Login = () => {
               <div style={{ position: 'relative' }}>
                 <MdLock style={{ position: 'absolute', top: '50%', left: '16px', transform: 'translateY(-50%)', color: '#9ca3af', fontSize: '1.2rem' }} />
                 <input 
-                  type="password" 
+                  type={showConfirmPassword ? 'text' : 'password'} 
                   className="form-control" 
                   placeholder="Re-enter new password" 
-                  style={{ width: '100%', padding: '12px 12px 12px 48px', borderRadius: '8px', border: '1px solid #d1d5db', boxSizing: 'border-box' }} 
+                  style={{ width: '100%', padding: '12px 44px 12px 48px', borderRadius: '8px', border: '1px solid #d1d5db', boxSizing: 'border-box' }} 
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   required 
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  style={{
+                    position: 'absolute',
+                    top: '50%',
+                    right: '14px',
+                    transform: 'translateY(-50%)',
+                    background: 'none',
+                    border: 'none',
+                    padding: 0,
+                    cursor: 'pointer',
+                    color: '#9ca3af',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '1.25rem',
+                  }}
+                  aria-label={showConfirmPassword ? 'Hide password' : 'Show password'}
+                >
+                  {showConfirmPassword ? <MdVisibilityOff /> : <MdVisibility />}
+                </button>
               </div>
             </div>
 
@@ -214,8 +283,3 @@ const Login = () => {
 };
 
 export default Login;
-
-
-
-
-

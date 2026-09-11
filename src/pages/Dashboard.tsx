@@ -42,6 +42,7 @@ type Job = {
   orderNumber?: string;
   title: string;
   date: string;
+  timeSlot?: string;
   status: JobStatus;
   cropType?: string;
   user: {
@@ -50,7 +51,7 @@ type Job = {
   };
   location: {
     address: string;
-    surveyNumber: string;
+    surveyNumber?: string;
     lat: number;
     lng: number;
   };
@@ -109,35 +110,47 @@ export default function Dashboard() {
           else if (raw.status === 'AWAITING_APPROVAL') mappedStatus = 'awaiting';
           else if (raw.status === 'COMPLETED') mappedStatus = 'completed';
 
-          let surveyNumber = 'N/A';
+          let surveyNumber = '';
           let cropType = '';
           if (raw.metadata && typeof raw.metadata === 'object') {
             const cf = raw.metadata.custom_fields || raw.metadata;
             if (cf.fld_1) surveyNumber = cf.fld_1;
             if (cf.fld_2) cropType = cf.fld_2;
+            if (cf.survey_number) surveyNumber = cf.survey_number;
+            if (cf.surveyNumber) surveyNumber = cf.surveyNumber;
+            if (cf.crop_type) cropType = cf.crop_type;
+            if (cf.cropType) cropType = cf.cropType;
           }
 
-          let formattedAddress = 'Address not provided';
-          if (raw.metadata?.custom_fields) {
+          const formatAddr = (addr: any, pin?: string) => {
+            if (!addr) return '';
+            try {
+              const parsed = typeof addr === 'string' ? JSON.parse(addr) : addr;
+              if (parsed && typeof parsed === 'object') {
+                const parts = [parsed.line1, parsed.line2, parsed.landmark, parsed.city, parsed.state, parsed.country].filter(Boolean);
+                const postal = parsed.pincode || pin;
+                if (parts.length > 0) {
+                  let formatted = parts.join(', ');
+                  if (postal && !formatted.includes(postal)) formatted += ` - ${postal}`;
+                  return formatted;
+                }
+              }
+              return typeof addr === 'string' ? addr : '';
+            } catch {
+              return typeof addr === 'string' ? addr : '';
+            }
+          };
+
+          let formattedAddress = formatAddr(raw.address, raw.pincode) || formatAddr(raw.Order?.customer_address, raw.pincode);
+
+          if (!formattedAddress && raw.metadata?.custom_fields) {
             const cf = raw.metadata.custom_fields;
             const parts = [cf.fld_5, cf.fld_4, cf.fld_3].filter(Boolean);
             if (parts.length > 0) formattedAddress = parts.join(', ');
-          } else if (raw.Order?.customer_address) {
-            try {
-              const parsed = typeof raw.Order.customer_address === 'string' ? JSON.parse(raw.Order.customer_address) : raw.Order.customer_address;
-              const parts = [parsed.line1, parsed.line2, parsed.city, parsed.state, parsed.pincode].filter(Boolean);
-              formattedAddress = parts.length > 0 ? parts.join(', ') : (typeof raw.Order.customer_address === 'string' ? raw.Order.customer_address : 'Address available');
-            } catch (e) {
-              formattedAddress = raw.Order.customer_address;
-            }
-          } else if (raw.address) {
-            try {
-              const parsed = typeof raw.address === 'string' ? JSON.parse(raw.address) : raw.address;
-              const parts = [parsed.line1, parsed.line2, parsed.city, parsed.state, parsed.country].filter(Boolean);
-              formattedAddress = parts.length > 0 ? parts.join(', ') : (typeof raw.address === 'string' ? raw.address : 'Address available');
-            } catch (e) {
-              formattedAddress = raw.address;
-            }
+          }
+
+          if (!formattedAddress) {
+            formattedAddress = 'Address not provided';
           }
 
           return {
@@ -146,6 +159,7 @@ export default function Dashboard() {
             orderNumber: raw.Order?.order_number || '',
             title: raw.Service?.name || 'Partner Service Booking',
             date: raw.scheduled_date ? new Date(raw.scheduled_date).toLocaleDateString('en-GB') : 'N/A',
+            timeSlot: raw.scheduled_time_slot || raw.metadata?.scheduled_time_slot || '',
             status: mappedStatus,
             cropType,
             user: {
@@ -154,9 +168,9 @@ export default function Dashboard() {
             },
             location: {
               address: formattedAddress,
-              surveyNumber,
-              lat: Number(raw.lat) || 0,
-              lng: Number(raw.lng) || 0
+              surveyNumber: surveyNumber || undefined,
+              lat: Number(raw.lat) || (raw.metadata?.geolocation ? Number(raw.metadata.geolocation.split(',')[0].trim()) : 0),
+              lng: Number(raw.lng) || (raw.metadata?.geolocation ? Number(raw.metadata.geolocation.split(',')[1].trim()) : 0)
             },
             progressUpdates: (raw.progress_updates || []).map((p: any) => ({
               id: p.id,
@@ -455,7 +469,7 @@ export default function Dashboard() {
         </div>
 
         <div className="job-details">
-          <p className="job-date">Scheduled: {job.date}</p>
+          <p className="job-date">Scheduled: {job.date}{job.timeSlot ? ` • ${job.timeSlot}` : ''}</p>
           
           <div className="job-customer-section">
             <div className="job-customer-item">
@@ -472,7 +486,11 @@ export default function Dashboard() {
             <FiMapPin className="location-icon" />
             <div className="location-content" style={{width: '100%'}}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
-                <span style={{ fontSize: '0.85rem', color: '#166534', fontWeight: 600 }}>Survey No: {job.location.surveyNumber}</span>
+                {job.location.surveyNumber ? (
+                  <span style={{ fontSize: '0.85rem', color: '#166534', fontWeight: 600 }}>Survey No: {job.location.surveyNumber}</span>
+                ) : (
+                  <span style={{ fontSize: '0.85rem', color: '#166534', fontWeight: 600 }}>Service Location</span>
+                )}
                 {job.location.lat && job.location.lng ? (
                   <a 
                     href={`https://www.google.com/maps?q=${job.location.lat},${job.location.lng}`} 

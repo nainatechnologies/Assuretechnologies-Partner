@@ -1,4 +1,3 @@
-import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FiArrowLeft, FiUser, FiMail, FiPhone, FiMapPin, FiShield } from 'react-icons/fi';
 import './Dashboard.css';
