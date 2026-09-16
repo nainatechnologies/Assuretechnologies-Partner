@@ -177,6 +177,12 @@ export default function Dashboard() {
               date: p.createdAt ? new Date(p.createdAt).toLocaleString() : 'N/A',
               description: p.description,
               photos: p.photos || []
+            })),
+            extraItems: (raw.extra_items || raw.extraItems || raw.ExtraItemsRequests || []).map((e: any) => ({
+              id: String(e.id),
+              description: e.description,
+              qty: Number(e.qty) || 1,
+              status: e.status || 'PENDING'
             }))
           };
         });
@@ -519,18 +525,18 @@ export default function Dashboard() {
                 <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.85rem' }}>
                   <span style={{ color: '#1e293b', fontWeight: 500 }}>{item.description} (Qty: {item.qty})</span>
                   {item.status === 'APPROVED' && (
-                    <span style={{ backgroundColor: '#dcfce7', color: '#15803d', padding: '2px 8px', borderRadius: '12px', fontWeight: 600, fontSize: '0.75rem' }}>
-                      ? Approved by Customer
+                    <span style={{ backgroundColor: '#dcfce7', color: '#15803d', padding: '2px 8px', borderRadius: '12px', fontWeight: 600, fontSize: '0.75rem', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                      <FiCheckCircle size={12} /> Approved by Customer
                     </span>
                   )}
                   {item.status === 'REJECTED' && (
-                    <span style={{ backgroundColor: '#fee2e2', color: '#b91c1c', padding: '2px 8px', borderRadius: '12px', fontWeight: 600, fontSize: '0.75rem' }}>
-                      ? Declined by Customer
+                    <span style={{ backgroundColor: '#fee2e2', color: '#b91c1c', padding: '2px 8px', borderRadius: '12px', fontWeight: 600, fontSize: '0.75rem', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                      <FiX size={12} /> Declined by Customer
                     </span>
                   )}
                   {item.status === 'PENDING' && (
-                    <span style={{ backgroundColor: '#fef3c7', color: '#b45309', padding: '2px 8px', borderRadius: '12px', fontWeight: 600, fontSize: '0.75rem' }}>
-                      ? Pending Decision
+                    <span style={{ backgroundColor: '#fef3c7', color: '#b45309', padding: '2px 8px', borderRadius: '12px', fontWeight: 600, fontSize: '0.75rem', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                      <FiClock size={12} /> Pending Decision
                     </span>
                   )}
                 </div>
