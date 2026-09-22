@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { MdEmail, MdLock, MdVisibility, MdVisibilityOff } from 'react-icons/md';
 import { toast } from 'react-toastify';
@@ -6,6 +6,14 @@ import api from '../services/api';
 
 const Login = () => {
   const navigate = useNavigate();
+
+  useEffect(() => {
+    const token = localStorage.getItem('partner_token') || localStorage.getItem('authToken');
+    const user = localStorage.getItem('user');
+    if (token && user) {
+      navigate('/dashboard', { replace: true });
+    }
+  }, [navigate]);
 
   const [step, setStep] = useState<'LOGIN' | 'SET_PASSWORD'>('LOGIN');
   const [email, setEmail] = useState('');
@@ -35,6 +43,11 @@ const Login = () => {
           return;
         }
 
+        const token = response.data.data?.token || response.data.token;
+        if (token) {
+          localStorage.setItem('partner_token', token);
+          localStorage.setItem('authToken', token);
+        }
         if (response.data.data?.user) {
           localStorage.setItem('user', JSON.stringify(response.data.data.user));
         }
@@ -75,6 +88,11 @@ const Login = () => {
       const response = await api.post('/auth/partner/set-password', payload);
 
       if (response.data.success) {
+        const token = response.data.data?.token || response.data.token;
+        if (token) {
+          localStorage.setItem('partner_token', token);
+          localStorage.setItem('authToken', token);
+        }
         if (response.data.data?.user) {
           localStorage.setItem('user', JSON.stringify(response.data.data.user));
         }
