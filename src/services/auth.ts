@@ -12,6 +12,8 @@ export const loginUser = (user: AuthUser) => {
 
 export const logoutUser = () => {
   localStorage.removeItem("user");
+  localStorage.removeItem("partner_token");
+  localStorage.removeItem("authToken");
 };
 
 export const isAuthenticated = (): boolean => {

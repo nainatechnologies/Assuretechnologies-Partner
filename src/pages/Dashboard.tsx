@@ -1,4 +1,41 @@
-import React, { useState } from 'react';
+
+const playNotificationSound = () => {
+  try {
+    const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx = new AudioCtx();
+    if (ctx.state === 'suspended') {
+      ctx.resume().catch(() => {});
+    }
+    const now = ctx.currentTime;
+
+    const osc1 = ctx.createOscillator();
+    const gain1 = ctx.createGain();
+    osc1.type = 'sine';
+    osc1.frequency.setValueAtTime(587.33, now); // D5
+    gain1.gain.setValueAtTime(0.2, now);
+    gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
+    osc1.connect(gain1);
+    gain1.connect(ctx.destination);
+    osc1.start(now);
+    osc1.stop(now + 0.3);
+
+    const osc2 = ctx.createOscillator();
+    const gain2 = ctx.createGain();
+    osc2.type = 'sine';
+    osc2.frequency.setValueAtTime(880, now + 0.12); // A5
+    gain2.gain.setValueAtTime(0.25, now + 0.12);
+    gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.55);
+    osc2.connect(gain2);
+    gain2.connect(ctx.destination);
+    osc2.start(now + 0.12);
+    osc2.stop(now + 0.55);
+  } catch (e) {
+    console.warn('Audio chime failed:', e);
+  }
+};
+
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-toastify';
@@ -61,6 +98,14 @@ type Job = {
 
 export default function Dashboard() {
   const navigate = useNavigate();
+
+  useEffect(() => {
+    const userStr = localStorage.getItem('user');
+    const token = localStorage.getItem('partner_token') || localStorage.getItem('authToken');
+    if (!userStr && !token) {
+      navigate('/login');
+    }
+  }, [navigate]);
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<JobStatus>('assigned');
   const [page, setPage] = useState(1);
@@ -94,7 +139,7 @@ export default function Dashboard() {
   const [showPreviousProgressModal, setShowPreviousProgressModal] = useState(false);
   const [selectedProgressUpdates, setSelectedProgressUpdates] = useState<ProgressUpdate[]>([]);
 
-  const { data = { jobs: [], totalPages: 1 }, isLoading: loading } = useQuery({
+  const { data = { jobs: [], totalPages: 1 }, isLoading: loading, isFetching } = useQuery({
     queryKey: ['service-bookings', page],
     queryFn: async () => {
       const res = await api.get(`/partner/service-bookings?page=${page}&limit=${limit}`);
@@ -189,8 +234,42 @@ export default function Dashboard() {
         return { jobs, totalPages: meta.totalPages };
       }
       return { jobs: [], totalPages: 1 };
-    }
+    },
+    refetchInterval: 15000,
+    refetchIntervalInBackground: false,
   });
+
+  
+  const knownAssignedIdsRef = useRef<Set<string> | null>(null);
+
+  useEffect(() => {
+    if (!data.jobs) return;
+    const currentJobs = data.jobs as Job[];
+    const assignedJobs = currentJobs.filter((j) => j.status === 'assigned');
+
+    if (knownAssignedIdsRef.current === null) {
+      knownAssignedIdsRef.current = new Set(assignedJobs.map((j) => j.id));
+      return;
+    }
+
+    const newAssigned = assignedJobs.filter((j) => !knownAssignedIdsRef.current!.has(j.id));
+    if (newAssigned.length > 0) {
+      playNotificationSound();
+      if (typeof navigator !== 'undefined' && navigator.vibrate) {
+        try {
+          navigator.vibrate([200, 100, 200]);
+        } catch (e) {}
+      }
+      const title = newAssigned.length === 1 ? newAssigned[0].title : `${newAssigned.length} new jobs`;
+      toast.info(`🚨 New Job Assigned: ${title}`, {
+        position: 'top-right',
+        autoClose: 6000,
+      });
+      setActiveTab('assigned');
+    }
+
+    knownAssignedIdsRef.current = new Set(assignedJobs.map((j) => j.id));
+  }, [data.jobs]);
 
   const jobs = data.jobs as Job[];
   const totalPages = data.totalPages;
@@ -427,6 +506,8 @@ export default function Dashboard() {
     } catch (e) {
       console.error('Logout error:', e);
     }
+    localStorage.removeItem('partner_token');
+    localStorage.removeItem('authToken');
     localStorage.removeItem('user');
     navigate('/login');
   };
@@ -585,6 +666,26 @@ export default function Dashboard() {
       <header className="dashboard-header">
         <h1>Partner Dashboard</h1>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <button
+            onClick={() => queryClient.invalidateQueries({ queryKey: ['service-bookings'] })}
+            disabled={isFetching}
+            style={{
+              background: 'rgba(255,255,255,0.15)',
+              border: '1px solid rgba(255,255,255,0.4)',
+              borderRadius: '50%',
+              width: '36px',
+              height: '36px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: 'white',
+              cursor: isFetching ? 'not-allowed' : 'pointer',
+              transition: 'all 0.2s ease',
+            }}
+            title="Refresh jobs"
+          >
+            <FiRefreshCw size={16} className={isFetching ? 'animate-spin' : ''} />
+          </button>
           <button
             onClick={handleToggleDuty}
             disabled={togglingDuty}
