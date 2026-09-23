@@ -20,7 +20,7 @@ Complete handbook for running **Assure Partner** as a native Android application
 * **App Name**: `Assure Partner`
 * **Package ID / App ID**: `com.assuretechnologies.partner`
 * **Web Directory**: `dist`
-* **Cleartext HTTP**: Enabled in `AndroidManifest.xml` for local network/Wi-Fi testing (`http://192.168.0.7:5000`).
+* **Cleartext HTTP**: Enabled in `AndroidManifest.xml` for local network/Wi-Fi testing (`http://192.168.0.6:5000`).
 * **CapacitorHttp**: Enabled in `capacitor.config.ts` to bypass cross-origin cookie restrictions and use native Android HTTP networking.
 * **Authentication**: Bearer token is automatically stored upon login and attached via Axios request interceptor (`Authorization: Bearer <token>`).
 
@@ -29,7 +29,7 @@ Complete handbook for running **Assure Partner** as a native Android application
 ## 3. Switching Backend URLs
 
 * **Local Machine Web Dev**: `.env` $\rightarrow$ `VITE_API_BASE_URL=http://localhost:5000`
-* **Physical Mobile Phone (Wi-Fi)**: `.env.production` $\rightarrow$ `VITE_API_BASE_URL=http://192.168.0.7:5000`
+* **Physical Mobile Phone (Wi-Fi)**: `.env.production` $\rightarrow$ `VITE_API_BASE_URL=http://192.168.0.6:5000`
 * **Live Production Server**: `.env.production` $\rightarrow$ `VITE_API_BASE_URL=https://assuretech.chenchala.com`
 
 ---
